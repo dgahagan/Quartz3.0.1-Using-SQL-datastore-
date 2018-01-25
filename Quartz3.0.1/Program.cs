@@ -19,7 +19,6 @@ namespace QuartzSampleApp
             Console.WriteLine("Press any key to close the application");
             Console.ReadKey();
         }
-
         private static async Task RunProgramRunExample()
         {
             try
@@ -29,28 +28,42 @@ namespace QuartzSampleApp
                 {
                     { "quartz.serializer.type", "binary" }
                 };
-                StdSchedulerFactory factory = new StdSchedulerFactory(props);
+                
+                StdSchedulerFactory factory = new StdSchedulerFactory();
+                
                 IScheduler scheduler = await factory.GetScheduler();
 
                 // and start it off
                 await scheduler.Start();
+                IJobDetail helloJob = null;
+                var jobKey = new JobKey("HelloJob", "MyGroup");
+                helloJob = await scheduler.GetJobDetail(jobKey);
+                if (helloJob == null)
+                {
+                    Console.WriteLine("Creating new job");
+                    // Job does not exist in db
+                    // define the job and tie it to our HelloJob class
+                    IJobDetail job = JobBuilder.Create<HelloJob>()
+                        .WithIdentity(jobKey)
+                        .Build();
 
-                // define the job and tie it to our HelloJob class
-                IJobDetail job = JobBuilder.Create<HelloJob>()
-                    .WithIdentity("job1", "group1")
-                    .Build();
+                    // Trigger the job to run now, and then repeat every 10 seconds
+                    ITrigger trigger = TriggerBuilder.Create()
+                        .WithIdentity("trigger2", "group1")
+                        .StartNow()
+                        .WithSimpleSchedule(x => x
+                            .WithIntervalInSeconds(10)
+                            .RepeatForever())
+                        .Build();
 
-                // Trigger the job to run now, and then repeat every 10 seconds
-                ITrigger trigger = TriggerBuilder.Create()
-                    .WithIdentity("trigger1", "group1")
-                    .StartNow()
-                    .WithSimpleSchedule(x => x
-                        .WithIntervalInSeconds(10)
-                        .RepeatForever())
-                    .Build();
+                    // Tell quartz to schedule the job using our trigger
+                    await scheduler.ScheduleJob(job, trigger);
+                }
+                else {
+                    Console.WriteLine("Recovering SQL job");
+                }
 
-                // Tell quartz to schedule the job using our trigger
-                await scheduler.ScheduleJob(job, trigger);
+
 
                 // some sleep to show what's happening
                 await Task.Delay(TimeSpan.FromSeconds(60));
@@ -95,7 +108,7 @@ namespace QuartzSampleApp
     {
         public async Task Execute(IJobExecutionContext context)
         {
-            await Console.Out.WriteLineAsync("Greetings from HelloJob!");
+            await Console.Out.WriteLineAsync("Greetings from HelloJob!" + context.JobDetail.Key +" " + context.ScheduledFireTimeUtc);
         }
     }
 }
